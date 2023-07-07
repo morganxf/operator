@@ -302,6 +302,16 @@ func RunManager(ctx context.Context) error {
 		setupLog.Error(err, "unable to create controller", "controller", "VMAlertmanager")
 		return err
 	}
+	if err = (&controllers.K8sClusterReconciler{
+		Client:        mgr.GetClient(),
+		Log:           ctrl.Log.WithName("controllers").WithName("K8sClusterReconciler"),
+		OriginScheme:  mgr.GetScheme(),
+		BaseConf:      baseConfig,
+		OriginManager: mgr,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "K8sCluster")
+		return err
+	}
 	// +kubebuilder:scaffold:builder
 	setupLog.Info("starting vmconverter clients")
 

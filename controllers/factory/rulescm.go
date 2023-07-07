@@ -2,6 +2,8 @@ package factory
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/binary"
 	"fmt"
 	"hash/fnv"
 	"reflect"
@@ -244,7 +246,7 @@ func SelectRules(ctx context.Context, cr *victoriametricsv1beta1.VMAlert, rclien
 	var badRules int
 	var errors []string
 	for _, pRule := range vmRules {
-		content, err := generateContent(pRule.Spec, cr.Spec.EnforcedNamespaceLabel, pRule.Namespace)
+		content, err := generateContent(pRule, cr.Spec.EnforcedNamespaceLabel)
 		if err != nil {
 			badRules++
 			errors = append(errors, fmt.Sprintf("cannot generate content for rule: %s, err :%s", pRule.Name, err))
@@ -278,7 +280,9 @@ func SelectRules(ctx context.Context, cr *victoriametricsv1beta1.VMAlert, rclien
 	return rules, nil
 }
 
-func generateContent(promRule victoriametricsv1beta1.VMRuleSpec, enforcedNsLabel, ns string) (string, error) {
+func generateContent(rule *victoriametricsv1beta1.VMRule, enforcedNsLabel string) (string, error) {
+	promRule := rule.Spec
+	ns := rule.Namespace
 	if enforcedNsLabel != "" {
 		log.Info("enforce ns label is partly supported, create issue for it")
 		for gi, group := range promRule.Groups {
@@ -288,6 +292,12 @@ func generateContent(promRule victoriametricsv1beta1.VMRuleSpec, enforcedNsLabel
 				}
 				promRule.Groups[gi].Rules[ri].Labels[enforcedNsLabel] = ns
 			}
+		}
+	}
+	if cluster, ok := rule.Labels["cluster"]; ok && len(cluster) > 0 {
+		id := hashTenant(cluster)
+		for i := range promRule.Groups {
+			promRule.Groups[i].Tenant = id
 		}
 	}
 	content, err := yaml.Marshal(promRule)
@@ -438,4 +448,17 @@ func sortMap(m map[string]string) []item {
 		return kv[i].key < kv[j].key
 	})
 	return kv
+}
+
+func hashTenant(tenantName string) string {
+	hash := md5.Sum([]byte(tenantName))
+	high := hash[:8]
+	low := hash[8:]
+	result := make([]byte, len(high))
+	for i := range high {
+		result[i] = high[i] ^ low[i]
+	}
+	highInt := binary.BigEndian.Uint32(result[:4])
+	lowInt := binary.BigEndian.Uint32(result[4:])
+	return fmt.Sprintf("%d:%d", highInt, lowInt)
 }
