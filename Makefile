@@ -379,8 +379,8 @@ package-arch:
 
 build-operator-crosscompile: build
 	#CGO_ENABLED=0 GOARCH=arm $(MAKE) package-arch
-	CGO_ENABLED=0 GOARCH=arm64 $(MAKE) package-arch
-	CGO_ENABLED=0 GOARCH=amd64 $(MAKE) package-arch
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=arm64 $(MAKE) package-arch
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=amd64 $(MAKE) package-arch
 	#CGO_ENABLED=0 GOARCH=ppc64le $(MAKE) package-arch
 	#CGO_ENABLED=0 GOARCH=386 $(MAKE) package-arch
 
@@ -455,3 +455,12 @@ generate-client: get-client-generator
 	rm -rf github.com/
 
 include internal/config-reloader/Makefile
+
+morgan-docker-build:
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=amd64 $(MAKE) package-arch
+	docker build -t $(DOCKER_REPO):$(TAG)-$(GOARCH) \
+			--build-arg ARCH=$(GOARCH) \
+			-f Dockerfile-morgan .
+	docker push $(DOCKER_REPO):$(TAG)-$(GOARCH)
+	docker tag $(DOCKER_REPO):$(TAG)-$(GOARCH) $(DOCKER_REPO):$(TAG)
+	docker push $(DOCKER_REPO):$(TAG)
