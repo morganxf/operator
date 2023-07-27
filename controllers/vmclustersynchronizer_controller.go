@@ -120,6 +120,7 @@ func (c *SynchronizerController) Cancel() {
 func (c *SynchronizerController) CreatePrometheusRule(rule interface{}) {
 	promRule := rule.(*v1.PrometheusRule)
 	l := log.WithValues("kind", "alertRule", "name", promRule.Name, "ns", promRule.Namespace)
+	l.Info("start to create prometheusrule")
 	cr := converter.ConvertPromRule(promRule, c.baseConf)
 	c.fillVMRule(cr, l)
 
@@ -132,12 +133,14 @@ func (c *SynchronizerController) CreatePrometheusRule(rule interface{}) {
 		l.Error(err, "cannot create AlertRule from Prometheusrule")
 		return
 	}
+	l.Info("end to create prometheusrule")
 }
 
 // UpdatePrometheusRule updates vmrule
 func (c *SynchronizerController) UpdatePrometheusRule(_old, new interface{}) {
 	promRuleNew := new.(*v1.PrometheusRule)
 	l := log.WithValues("kind", "VMRule", "name", promRuleNew.Name, "ns", promRuleNew.Namespace)
+	l.Info("start to update prometheusrule")
 	VMRule := converter.ConvertPromRule(promRuleNew, c.baseConf)
 	c.fillVMRule(VMRule, l)
 
@@ -168,6 +171,7 @@ func (c *SynchronizerController) UpdatePrometheusRule(_old, new interface{}) {
 		l.Error(err, "cannot update VMRule")
 		return
 	}
+	l.Info("end to update prometheusrule")
 }
 
 func (c *SynchronizerController) fillVMRule(rule *v1beta1.VMRule, logger logr.Logger) {

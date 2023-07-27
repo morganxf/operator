@@ -131,6 +131,7 @@ func (r *K8sClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		l.Error(err, "cannot add synchronizerController")
 		return ctrl.Result{}, err
 	}
+	l.Info("SynchronizerController size: %s: %v", len(synctlMap), synctlMap)
 
 	return
 }
