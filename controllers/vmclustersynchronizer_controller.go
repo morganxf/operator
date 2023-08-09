@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,47 +23,63 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+const clusterGatewayURL = "%s/apis/cluster.core.oam.dev/v1alpha1/clustergateways/%s/proxy"
+
 // SynchronizerController - watches for prometheus objects
 // and create VictoriaMetrics objects
 type SynchronizerController struct {
-	promClient  versioned.Interface
-	vclient     client.Client
-	ruleInf     cache.SharedInformer
-	baseConf    *config.BaseOperatorConf
-	clusterName string
-	kubeconfig  []byte
-	cancel      context.CancelFunc
+	promClient     versioned.Interface
+	vclient        client.Client
+	ruleInf        cache.SharedInformer
+	baseConf       *config.BaseOperatorConf
+	clusterName    string
+	kubeconfig     []byte
+	restKubeConfig *rest.Config
+	cancel         context.CancelFunc
+	Log            logr.Logger
 }
 
 // NewSynchronizerController builder for vmclustersynchronizer service
-func NewSynchronizerController(clusterName string, kubeconfig []byte, vclient client.Client, baseConf *config.BaseOperatorConf) (*SynchronizerController, error) {
-	clientCfg, err := clientcmd.NewClientConfigFromBytes(kubeconfig)
-	if err != nil {
-		return nil, fmt.Errorf("cannot build kubeClient for cluster %s: %w", clusterName, err)
-	}
-	restCfg, err := clientCfg.ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("cannot build restClient for cluster %s: %w", clusterName, err)
-	}
-	promCl, err := versioned.NewForConfig(restCfg)
-	if err != nil {
-		return nil, fmt.Errorf("cannot build promClient for cluster %s: %w", clusterName, err)
-	}
-
+func NewSynchronizerController(clusterName string, kubeconfig []byte, restKubeConfig rest.Config,
+	vclient client.Client, baseConf *config.BaseOperatorConf, l logr.Logger) (*SynchronizerController, error) {
 	c := &SynchronizerController{
-		promClient:  promCl,
-		vclient:     vclient,
-		baseConf:    baseConf,
-		clusterName: clusterName,
-		kubeconfig:  kubeconfig,
+		vclient:        vclient,
+		baseConf:       baseConf,
+		clusterName:    clusterName,
+		kubeconfig:     kubeconfig,
+		restKubeConfig: &restKubeConfig,
+		Log:            l,
+	}
+	l.Info("NewSynchronizerController")
+	if IsCNStackMode() {
+		c.restKubeConfig.Host = fmt.Sprintf(clusterGatewayURL, c.restKubeConfig.Host, clusterName)
+		promCl, err := versioned.NewForConfig(c.restKubeConfig)
+		if err != nil {
+			return nil, fmt.Errorf("cannot build promClient for cluster %s: %w", clusterName, err)
+		}
+		c.promClient = promCl
+	} else {
+		clientCfg, err := clientcmd.NewClientConfigFromBytes(kubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("cannot build kubeClient for cluster %s: %w", clusterName, err)
+		}
+		restCfg, err := clientCfg.ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("cannot build restClient for cluster %s: %w", clusterName, err)
+		}
+		promCl, err := versioned.NewForConfig(restCfg)
+		if err != nil {
+			return nil, fmt.Errorf("cannot build promClient for cluster %s: %w", clusterName, err)
+		}
+		c.promClient = promCl
 	}
 	c.ruleInf = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return promCl.MonitoringV1().PrometheusRules(config.MustGetWatchNamespace()).List(context.TODO(), options)
+				return c.promClient.MonitoringV1().PrometheusRules(config.MustGetWatchNamespace()).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return promCl.MonitoringV1().PrometheusRules(config.MustGetWatchNamespace()).Watch(context.TODO(), options)
+				return c.promClient.MonitoringV1().PrometheusRules(config.MustGetWatchNamespace()).Watch(context.TODO(), options)
 			},
 		},
 		&v1.PrometheusRule{},
@@ -73,6 +90,17 @@ func NewSynchronizerController(clusterName string, kubeconfig []byte, vclient cl
 		AddFunc:    c.CreatePrometheusRule,
 		UpdateFunc: c.UpdatePrometheusRule,
 	})
+	namespace, err := getNamespace()
+	if err != nil {
+		c.Log.Error(err, "failed to get namespace")
+		return nil, err
+	}
+	promRules, err := c.promClient.MonitoringV1().PrometheusRules(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		c.Log.Error(err, "failed to list prometheusrule")
+		return nil, err
+	}
+	c.Log.Info("prometheusrule size", "size", len(promRules.Items))
 	return c, nil
 }
 
@@ -119,7 +147,7 @@ func (c *SynchronizerController) Cancel() {
 // CreatePrometheusRule converts prometheus rule to vmrule
 func (c *SynchronizerController) CreatePrometheusRule(rule interface{}) {
 	promRule := rule.(*v1.PrometheusRule)
-	l := log.WithValues("kind", "alertRule", "name", promRule.Name, "ns", promRule.Namespace)
+	l := log.WithValues("cluster", c.clusterName, "name", promRule.Name, "ns", promRule.Namespace)
 	l.Info("start to create prometheusrule")
 	cr := converter.ConvertPromRule(promRule, c.baseConf)
 	c.fillVMRule(cr, l)
@@ -139,7 +167,7 @@ func (c *SynchronizerController) CreatePrometheusRule(rule interface{}) {
 // UpdatePrometheusRule updates vmrule
 func (c *SynchronizerController) UpdatePrometheusRule(_old, new interface{}) {
 	promRuleNew := new.(*v1.PrometheusRule)
-	l := log.WithValues("kind", "VMRule", "name", promRuleNew.Name, "ns", promRuleNew.Namespace)
+	l := log.WithValues("cluster", c.clusterName, "name", promRuleNew.Name, "ns", promRuleNew.Namespace)
 	l.Info("start to update prometheusrule")
 	VMRule := converter.ConvertPromRule(promRuleNew, c.baseConf)
 	c.fillVMRule(VMRule, l)
@@ -187,6 +215,7 @@ func (c *SynchronizerController) fillVMRule(rule *v1beta1.VMRule, logger logr.Lo
 		rule.Labels = map[string]string{}
 	}
 	rule.Labels["cluster"] = c.clusterName
+	rule.OwnerReferences = nil
 }
 
 var _namespace string

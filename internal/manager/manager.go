@@ -24,6 +24,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/klog/v2"
 	"net/http"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -67,6 +68,8 @@ func init() {
 
 	utilruntime.Must(victoriametricsv1beta1.AddToScheme(scheme))
 	utilruntime.Must(metav1.AddToScheme(scheme))
+
+	utilruntime.Must(clusterv1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 
@@ -304,6 +307,7 @@ func RunManager(ctx context.Context) error {
 	}
 	if err = (&controllers.K8sClusterReconciler{
 		Client:        mgr.GetClient(),
+		KubeConfig:    mgr.GetConfig(),
 		Log:           ctrl.Log.WithName("controllers").WithName("K8sClusterReconciler"),
 		OriginScheme:  mgr.GetScheme(),
 		BaseConf:      baseConfig,
