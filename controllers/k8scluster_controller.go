@@ -194,6 +194,9 @@ func (r *K8sClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // SetupWithManager general setup method
 func (r *K8sClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if len(os.Getenv("MULTI_CLUSTER")) == 0 {
+		return nil
+	}
 	if IsCNStackMode() {
 		return ctrl.NewControllerManagedBy(mgr).
 			For(&clusterv1.ManagedCluster{}).
