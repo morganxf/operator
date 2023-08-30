@@ -57,6 +57,10 @@ func (r *VMAlertmanagerReconciler) Scheme() *runtime.Scheme {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=*
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=*
 func (r *VMAlertmanagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+	watchNamespace, _ := getNamespace()
+	if req.Namespace != watchNamespace {
+		return result, nil
+	}
 	reqLogger := r.Log.WithValues("vmalertmanager", req.NamespacedName)
 
 	instance := &victoriametricsv1beta1.VMAlertmanager{}

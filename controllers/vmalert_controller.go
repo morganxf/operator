@@ -57,6 +57,10 @@ func (r *VMAlertReconciler) Scheme() *runtime.Scheme {
 // +kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmalerts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmalerts/finalizers,verbs=*
 func (r *VMAlertReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+	watchNamespace, _ := getNamespace()
+	if req.Namespace != watchNamespace {
+		return result, nil
+	}
 	reqLogger := r.Log.WithValues("vmalert", req.NamespacedName)
 
 	vmAlertSync.Lock()

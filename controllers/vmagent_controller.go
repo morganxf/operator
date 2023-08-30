@@ -67,6 +67,10 @@ type VMAgentReconciler struct {
 // +kubebuilder:rbac:groups="policy",resources=podsecuritypolicies,verbs=get;create,update;list
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;create,update;list
 func (r *VMAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+	watchNamespace, _ := getNamespace()
+	if req.Namespace != watchNamespace {
+		return result, nil
+	}
 	reqLogger := r.Log.WithValues("vmagent", req.NamespacedName)
 
 	vmAgentSync.Lock()
