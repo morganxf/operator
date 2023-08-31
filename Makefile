@@ -457,10 +457,17 @@ generate-client: get-client-generator
 include internal/config-reloader/Makefile
 
 morgan-docker-build:
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=amd64 $(MAKE) package-arch
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) $(MAKE) package-arch
 	docker build -t $(DOCKER_REPO):$(TAG)-$(GOARCH) \
 			--build-arg ARCH=$(GOARCH) \
 			-f Dockerfile-morgan .
 	docker push $(DOCKER_REPO):$(TAG)-$(GOARCH)
 	docker tag $(DOCKER_REPO):$(TAG)-$(GOARCH) $(DOCKER_REPO):$(TAG)
 	docker push $(DOCKER_REPO):$(TAG)
+
+morgan-docker-manifest:
+	docker manifest create $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-amd64 $(DOCKER_REPO):$(TAG)-arm64
+	docker manifest annotate $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-amd64 --os linux --arch amd64
+	docker manifest annotate $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-arm64 --os linux --arch arm64 --variant v8
+	docker manifest inspect $(DOCKER_REPO):$(TAG)
+	docker manifest push $(DOCKER_REPO):$(TAG)
