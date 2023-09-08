@@ -468,6 +468,6 @@ morgan-docker-build:
 morgan-docker-manifest:
 	docker manifest create $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-amd64 $(DOCKER_REPO):$(TAG)-arm64
 	docker manifest annotate $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-amd64 --os linux --arch amd64
-	docker manifest annotate $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-arm64 --os linux --arch arm64 --variant v8
+	docker manifest annotate $(DOCKER_REPO):$(TAG) $(DOCKER_REPO):$(TAG)-arm64 --os linux --arch arm64
 	docker manifest inspect $(DOCKER_REPO):$(TAG)
 	docker manifest push $(DOCKER_REPO):$(TAG)

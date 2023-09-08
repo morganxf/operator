@@ -1,6 +1,6 @@
 ARG ARCH
 
-FROM victoriametrics/operator:v0.32.1-${ARCH}
+FROM morganxf/vm-operator:v0.37.0-${ARCH}
 # src_binary arg must be in scope, after FROM
 
 ARG ARCH
